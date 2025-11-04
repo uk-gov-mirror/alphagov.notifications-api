@@ -6,13 +6,20 @@ import pytest
 from freezegun import freeze_time
 from notifications_utils.url_safe_token import generate_token
 
+from app.constants import EMAIL_TYPE
+from app.serialised_models import SerialisedTemplate
 from app.utils import (
+    EmailFilePlaceholder,
+    extract_email_file_placeholders,
     format_sequential_number,
     get_london_midnight_in_utc,
     get_midnight_for_day_before,
     midnight_n_days_ago,
     url_with_token,
 )
+from app.v2.errors import BadRequestError
+
+from tests.app.db import create_template
 
 
 @pytest.mark.parametrize(
@@ -91,3 +98,52 @@ def test_url_with_token__create_confirmation_url(hostnames, notify_api):
     generated_unsubscribe_link = url_with_token(data, url=url, base_url=base_url)
 
     assert generated_unsubscribe_link == expected_unsubscribe_link
+
+
+def test_EmailFilePlaceholder_happy_path():
+    email_file_placeholder = EmailFilePlaceholder(
+        "file::invitation.pdf::36fb0730-6259-4da1-8a80-c8de22ad4246"
+    )
+    assert email_file_placeholder.string == "file::invitation.pdf::36fb0730-6259-4da1-8a80-c8de22ad4246"
+    assert email_file_placeholder.id == "36fb0730-6259-4da1-8a80-c8de22ad4246"
+
+
+def test_EmailFilePlaceholder_invalid_uuid():
+    with pytest.raises(BadRequestError):
+        EmailFilePlaceholder("file::invitation.pdf::blah")
+
+
+def test_extract_email_file_placeholders(notify_api, mocker, sample_service):
+    content = """
+    Dear ((name)),
+
+    Here is your invitation:
+    ((file::invitation.pdf::36fb0730-6259-4da1-8a80-c8de22ad4246))
+
+    And here is the form to bring to the appointment:
+    ((file::form.pdf::429c0b16-704e-41cb-8181-6448567f7042))
+    """
+    template_id = create_template(sample_service, content=content, template_type=EMAIL_TYPE).id
+    template = SerialisedTemplate.from_id_and_service_id(
+        template_id=template_id, service_id=sample_service.id
+    )
+    email_files = extract_email_file_placeholders(template)
+
+    assert email_files[0].string == "file::invitation.pdf::36fb0730-6259-4da1-8a80-c8de22ad4246"
+
+    assert email_files[1].string == "file::form.pdf::429c0b16-704e-41cb-8181-6448567f7042"
+
+
+def test_extract_email_file_placeholders_when_none_found(notify_api, mocker, sample_service):
+    content = """
+    Dear ((name)),
+
+    Your verification code is: 123 456
+    """
+    template_id = create_template(
+        sample_service, content=content, template_type=EMAIL_TYPE
+    ).id
+    template = SerialisedTemplate.from_id_and_service_id(
+        template_id=template_id, service_id=sample_service.id
+    )
+    assert extract_email_file_placeholders(template) == []

@@ -34,7 +34,10 @@ from app.dao.notifications_dao import (
     dao_delete_notifications_by_id,
 )
 from app.models import Notification
-from app.utils import parse_and_format_phone_number
+from app.utils import (
+    extract_email_file_placeholders,
+    parse_and_format_phone_number
+)
 from app.v2.errors import BadRequestError, QrCodeTooLongError
 
 REDIS_GET_AND_INCR_DAILY_LIMIT_DURATION_SECONDS = Histogram(
@@ -45,7 +48,7 @@ REDIS_GET_AND_INCR_DAILY_LIMIT_DURATION_SECONDS = Histogram(
 
 def create_content_for_notification(template, personalisation, recipient):
     if template.template_type == EMAIL_TYPE:
-        if does_template_have_email_file_placeholders(template.content):
+        if extract_email_file_placeholders(template):
             personalisation = add_email_file_links_to_personalisation(template, personalisation, recipient)
         template_object = PlainTextEmailTemplate(
             {
@@ -95,7 +98,7 @@ def check_placeholders(template_object):
 
 
 def add_email_file_links_to_personalisation(template, personalisation, recipient):
-    email_file_placeholders = extract_email_file_placeholders(template.content) # [obj.string, obj.id]
+    email_file_placeholders = extract_email_file_placeholders(template)  # [obj.string, obj.id]
 
     for placeholder in email_file_placeholders:
         template_email_file_object = dao_get_template_email_file_by_id(placeholder.id)
@@ -105,7 +108,9 @@ def add_email_file_links_to_personalisation(template, personalisation, recipient
             template_email_file_from_s3,
             # do we want to check if is_csv some other way? Do we want to cache it / save in db?
             (template_email_file_object.filename).endswith(".csv"),
-            confirmation_email=validate_and_format_email_address(recipient) if template_email_file_object.validate_users_email else None,
+            confirmation_email=validate_and_format_email_address(recipient)
+            if template_email_file_object.validate_users_email
+            else None,
             retention_period=template_email_file_object.retention_period,
             filename=template_email_file_object.filename,
         )

@@ -1,3 +1,5 @@
+import uuid
+
 from contextlib import suppress
 from datetime import datetime, timedelta
 from itertools import islice
@@ -9,6 +11,7 @@ from notifications_utils.recipient_validation.phone_number import PhoneNumber
 from notifications_utils.template import (
     HTMLEmailTemplate,
     LetterPrintTemplate,
+    PlainTextEmailTemplate,
     SMSMessageTemplate,
 )
 from notifications_utils.timezones import convert_bst_to_utc, utc_string_to_aware_gmt_datetime
@@ -195,3 +198,39 @@ def is_classmethod(method, cls):
     with suppress(AttributeError, KeyError):
         return isinstance(cls.__dict__[method.__name__], classmethod)
     return False
+
+
+def extract_email_file_placeholders(template):
+    placeholders = PlainTextEmailTemplate(
+        {
+            "content": template.content,
+            "subject": template.subject,
+            "template_type": template.template_type,
+        },
+    ).placeholders
+
+    email_file_placeholders = []
+
+    for placeholder in placeholders:
+        if placeholder.startswith("file::"):
+            email_file_placeholders.append(EmailFilePlaceholder(placeholder))
+
+    return email_file_placeholders
+
+
+class EmailFilePlaceholder():
+    def __init__(self, placeholder):
+        self.string = placeholder
+        self.id = self.get_id(placeholder)
+
+    def get_id(self, placeholder):
+        from app.v2.errors import BadRequestError
+
+        placeholder_parts = placeholder.split("::")
+        email_file_id = placeholder_parts[-1]
+        try:
+            uuid.UUID(str(email_file_id))
+            return email_file_id
+        except ValueError:
+            message = f"Template email file id for {self.string} is not a correct UUID."
+            raise BadRequestError(fields=[{"template": message}], message=message)
