@@ -36,7 +36,8 @@ from app.dao.notifications_dao import (
 from app.models import Notification
 from app.utils import (
     extract_email_file_placeholders,
-    parse_and_format_phone_number
+    parse_and_format_phone_number,
+    try_download_template_email_file_from_s3,
 )
 from app.v2.errors import BadRequestError, QrCodeTooLongError
 

@@ -8,6 +8,8 @@ from urllib.parse import urljoin
 from flask import current_app, url_for
 from notifications_utils.recipient_validation.errors import InvalidPhoneError
 from notifications_utils.recipient_validation.phone_number import PhoneNumber
+from notifications_utils.s3 import S3ObjectNotFound
+from notifications_utils.s3 import s3download as utils_s3download
 from notifications_utils.template import (
     HTMLEmailTemplate,
     LetterPrintTemplate,
@@ -224,7 +226,6 @@ class EmailFilePlaceholder():
         self.id = self.get_id(placeholder)
 
     def get_id(self, placeholder):
-        from app.v2.errors import BadRequestError
 
         placeholder_parts = placeholder.split("::")
         email_file_id = placeholder_parts[-1]
@@ -232,5 +233,31 @@ class EmailFilePlaceholder():
             uuid.UUID(str(email_file_id))
             return email_file_id
         except ValueError:
+            from app.v2.errors import BadRequestError
+
             message = f"Template email file id for {self.string} is not a correct UUID."
             raise BadRequestError(fields=[{"template": message}], message=message)
+
+
+def try_download_template_email_file_from_s3(service_id, template_email_file_id):
+    file_path = f"{service_id}/{template_email_file_id}"
+    try:
+        return utils_s3download(
+            bucket_name=current_app.config["S3_BUCKET_TEMPLATE_EMAIL_FILES"], 
+            filename=file_path
+        )
+
+    except S3ObjectNotFound as e:
+        current_app.logger.warning(
+            "Template email file %s not in %s bucket",
+            template_email_file_id,
+            current_app.config["S3_BUCKET_TEMPLATE_EMAIL_FILES"],
+            extra={
+                "service_id": service_id,
+                "file_id": template_email_file_id,
+                "s3_key": file_path,
+                "s3_bucket": current_app.config["S3_BUCKET_TEMPLATE_EMAIL_FILES"],
+            },
+        )
+
+        raise e
