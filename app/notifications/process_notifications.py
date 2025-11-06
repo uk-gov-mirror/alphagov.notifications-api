@@ -104,10 +104,10 @@ def add_email_file_links_to_personalisation(template, personalisation, recipient
 
     for placeholder in email_file_placeholders:
         template_email_file_object = dao_get_template_email_file_by_id(placeholder.id)
-        template_email_file_from_s3 = try_download_template_email_file_from_s3(template.service_id, placeholder.id)
+        template_email_file_from_s3 = try_download_template_email_file_from_s3(template.service.id, placeholder.id)
 
         doc_download_link = document_download_client.upload_document(
-            template.service_id,
+            template.service.id,
             template_email_file_from_s3,
             # do we want to check if is_csv some other way? Do we want to cache it / save in db?
             (template_email_file_object.filename).endswith(".csv"),

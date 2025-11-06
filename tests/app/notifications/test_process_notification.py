@@ -18,6 +18,7 @@ from app.constants import (
 )
 from app.models import Notification, NotificationHistory
 from app.notifications.process_notifications import (
+    add_email_file_links_to_personalisation,
     create_content_for_notification,
     persist_notification,
     send_notification_to_queue,
@@ -90,6 +91,33 @@ def test_create_content_for_notification_raises_error_on_qr_code_too_long(
     assert e.value.num_bytes == 700
     assert e.value.max_bytes == 504
     assert e.value.data == "too much data " * 50
+
+
+def test_add_email_file_links_to_personalisation(notify_api, mocker, sample_service):
+    content = """
+    Dear ((name)),
+
+    Here is your invitation:
+    ((file::invitation.pdf::36fb0730-6259-4da1-8a80-c8de22ad4246))
+
+    And here is the form to bring to the appointment:
+    ((file::form.pdf::429c0b16-704e-41cb-8181-6448567f7042))
+    """
+    template_id = create_template(sample_service, content=content, template_type=EMAIL_TYPE).id
+    template = SerialisedTemplate.from_id_and_service_id(template_id=template_id, service_id=sample_service.id)
+
+    mocker.patch(
+        "app.utils.utils_s3download",
+        side_effect=["link1.gov.uk", "link2.gov.uk"],
+    )
+
+    personalisation = add_email_file_links_to_personalisation(template, {"name": "Anne"}, recipient="anne@example.com")
+
+    assert personalisation == {
+        "name": "Anne",
+        "file::invitation.pdf::36fb0730-6259-4da1-8a80-c8de22ad4246": "link1.gov.uk",
+        "file::form.pdf::429c0b16-704e-41cb-8181-6448567f7042": "link2.gov.uk",
+    }
 
 
 @freeze_time("2016-01-01 11:09:00.061258")
