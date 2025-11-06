@@ -33,6 +33,7 @@ from app.dao.notifications_dao import (
     dao_create_notification,
     dao_delete_notifications_by_id,
 )
+from app.dao.template_email_file_dao import dao_get_template_email_file_by_id
 from app.models import Notification
 from app.utils import (
     extract_email_file_placeholders,
