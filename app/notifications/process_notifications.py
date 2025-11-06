@@ -16,7 +16,7 @@ from notifications_utils.template import (
     SMSMessageTemplate,
 )
 
-from app import redis_store
+from app import document_download_client, redis_store
 from app.celery import provider_tasks
 from app.celery.letters_pdf_tasks import get_pdf_for_templated_letter
 from app.config import QueueNames
@@ -105,6 +105,7 @@ def add_email_file_links_to_personalisation(template, personalisation, recipient
     for placeholder in email_file_placeholders:
         template_email_file_object = dao_get_template_email_file_by_id(placeholder.id)
         template_email_file_from_s3 = try_download_template_email_file_from_s3(template.service_id, placeholder.id)
+
         doc_download_link = document_download_client.upload_document(
             template.service_id,
             template_email_file_from_s3,

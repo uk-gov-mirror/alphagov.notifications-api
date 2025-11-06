@@ -32,7 +32,7 @@ from tests.conftest import set_config
 
 def test_create_content_for_notification_passes(sample_email_template):
     template = SerialisedTemplate.from_id_and_service_id(sample_email_template.id, sample_email_template.service_id)
-    content = create_content_for_notification(template, None)
+    content = create_content_for_notification(template=template, personalisation=None, recipient="amanda@example.com")
     assert str(content) == template.content + "\n"
 
 
@@ -43,7 +43,9 @@ def test_create_content_for_notification_with_placeholders_passes(
         sample_template_with_placeholders.id,
         sample_template_with_placeholders.service_id,
     )
-    content = create_content_for_notification(template, {"name": "Bobby"})
+    content = create_content_for_notification(
+        template=template, personalisation={"name": "Bobby"}, recipient="amanda@example.com"
+    )
     assert content.content == template.content
     assert "Bobby" in str(content)
 
@@ -56,7 +58,7 @@ def test_create_content_for_notification_fails_with_missing_personalisation(
         sample_template_with_placeholders.service_id,
     )
     with pytest.raises(BadRequestError):
-        create_content_for_notification(template, None)
+        create_content_for_notification(template=template, personalisation=None, recipient="07900111222")
 
 
 def test_create_content_for_notification_allows_additional_personalisation(
@@ -66,7 +68,11 @@ def test_create_content_for_notification_allows_additional_personalisation(
         sample_template_with_placeholders.id,
         sample_template_with_placeholders.service_id,
     )
-    create_content_for_notification(template, {"name": "Bobby", "Additional placeholder": "Data"})
+    create_content_for_notification(
+        template=template,
+        personalisation={"name": "Bobby", "Additional placeholder": "Data"},
+        recipient="07900111222",
+    )
 
 
 def test_create_content_for_notification_raises_error_on_qr_code_too_long(
@@ -76,7 +82,9 @@ def test_create_content_for_notification_raises_error_on_qr_code_too_long(
     template = SerialisedTemplate.from_id_and_service_id(db_template.id, db_template.service_id)
 
     with pytest.raises(QrCodeTooLongError) as e:
-        create_content_for_notification(template, {"code": "too much data " * 50})
+        create_content_for_notification(
+            template=template, personalisation={"code": "too much data " * 50}, recipient=None
+        )
 
     assert e.value.message == "Cannot create a usable QR code - the link is too long"
     assert e.value.num_bytes == 700

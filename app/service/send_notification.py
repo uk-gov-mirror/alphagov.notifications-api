@@ -71,9 +71,7 @@ def send_one_off_notification(service_id, post_data):
         allow_guest_list_recipients=False,
     )
 
-    validate_template(
-        template.id, personalisation, service, template.template_type, recipient_data or post_data["to"]
-    )
+    validate_template(template.id, personalisation, service, template.template_type, recipient_data or post_data["to"])
 
     postage = None
     client_reference = None

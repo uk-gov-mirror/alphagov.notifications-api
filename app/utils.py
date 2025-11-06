@@ -1,5 +1,4 @@
 import uuid
-
 from contextlib import suppress
 from datetime import datetime, timedelta
 from itertools import islice
@@ -220,32 +219,28 @@ def extract_email_file_placeholders(template):
     return email_file_placeholders
 
 
-class EmailFilePlaceholder():
+class EmailFilePlaceholder:
     def __init__(self, placeholder):
         self.string = placeholder
         self.id = self.get_id(placeholder)
 
     def get_id(self, placeholder):
-
         placeholder_parts = placeholder.split("::")
         email_file_id = placeholder_parts[-1]
         try:
             uuid.UUID(str(email_file_id))
             return email_file_id
-        except ValueError:
+        except ValueError as e:
             from app.v2.errors import BadRequestError
 
             message = f"Template email file id for {self.string} is not a correct UUID."
-            raise BadRequestError(fields=[{"template": message}], message=message)
+            raise BadRequestError(fields=[{"template": message}], message=message) from e
 
 
 def try_download_template_email_file_from_s3(service_id, template_email_file_id):
     file_path = f"{service_id}/{template_email_file_id}"
     try:
-        return utils_s3download(
-            bucket_name=current_app.config["S3_BUCKET_TEMPLATE_EMAIL_FILES"], 
-            filename=file_path
-        )
+        return utils_s3download(bucket_name=current_app.config["S3_BUCKET_TEMPLATE_EMAIL_FILES"], filename=file_path)
 
     except S3ObjectNotFound as e:
         current_app.logger.warning(

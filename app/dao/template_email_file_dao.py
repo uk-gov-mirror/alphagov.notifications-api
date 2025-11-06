@@ -1,6 +1,7 @@
 from app.dao.dao_utils import autocommit
 from app.models import TemplateEmailFile, TemplateEmailFileHistory
 
+
 @autocommit
 def dao_get_template_email_file_by_id(template_email_files_id, template_version=None):
     if template_version is not None:
