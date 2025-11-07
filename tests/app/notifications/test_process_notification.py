@@ -1,6 +1,7 @@
 import datetime
 import uuid
 from collections import namedtuple
+from unittest.mock import call
 
 import pytest
 from boto3.exceptions import Boto3Error
@@ -108,6 +109,20 @@ def test_add_email_file_links_to_personalisation(notify_api, mocker, sample_serv
 
     mocker.patch(
         "app.utils.utils_s3download",
+        side_effect=["file_from_s3_1", "file_from_s3_2"],
+    )
+
+    # TODO: use real template email file objects when endpoints PR gets merged
+    mocker.patch(
+        "app.notifications.process_notifications.dao_get_template_email_file_by_id",
+        side_effect=[
+            mocker.Mock(filename="invitation.pdf", validate_users_email=True, retention_period=26),
+            mocker.Mock(filename="form.pdf", validate_users_email=True, retention_period=26),
+        ],
+    )
+
+    mock_upload = mocker.patch(
+        "app.notifications.process_notifications.document_download_client.upload_document",
         side_effect=["link1.gov.uk", "link2.gov.uk"],
     )
 
@@ -118,6 +133,25 @@ def test_add_email_file_links_to_personalisation(notify_api, mocker, sample_serv
         "file::invitation.pdf::36fb0730-6259-4da1-8a80-c8de22ad4246": "link1.gov.uk",
         "file::form.pdf::429c0b16-704e-41cb-8181-6448567f7042": "link2.gov.uk",
     }
+
+    assert mock_upload.mock_calls == [
+        call(
+            str(sample_service.id),
+            "file_from_s3_1",
+            False,
+            confirmation_email="anne@example.com",
+            retention_period=26,
+            filename="invitation.pdf",
+        ),
+        call(
+            str(sample_service.id),
+            "file_from_s3_2",
+            False,
+            confirmation_email="anne@example.com",
+            retention_period=26,
+            filename="form.pdf",
+        ),
+    ]
 
 
 @freeze_time("2016-01-01 11:09:00.061258")
