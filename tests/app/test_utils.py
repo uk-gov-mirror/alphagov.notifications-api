@@ -109,8 +109,11 @@ def test_EmailFilePlaceholder_happy_path():
 
 
 def test_EmailFilePlaceholder_invalid_uuid():
-    with pytest.raises(BadRequestError):
+    with pytest.raises(BadRequestError) as e:
         EmailFilePlaceholder("file::invitation.pdf::blah")
+
+    assert e.value.status_code == 400
+    assert e.value.message == "template_email_file_id blah is not a valid UUID."
 
 
 def test_extract_email_file_placeholders(notify_api, mocker, sample_service):

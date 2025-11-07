@@ -233,7 +233,7 @@ class EmailFilePlaceholder:
         except ValueError as e:
             from app.v2.errors import BadRequestError
 
-            message = f"Template email file id for {self.string} is not a correct UUID."
+            message = f"template_email_file_id {email_file_id} is not a valid UUID."
             raise BadRequestError(fields=[{"template": message}], message=message) from e
 
 

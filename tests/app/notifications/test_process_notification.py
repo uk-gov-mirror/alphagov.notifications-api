@@ -107,11 +107,6 @@ def test_add_email_file_links_to_personalisation(notify_api, mocker, sample_serv
     template_id = create_template(sample_service, content=content, template_type=EMAIL_TYPE).id
     template = SerialisedTemplate.from_id_and_service_id(template_id=template_id, service_id=sample_service.id)
 
-    mocker.patch(
-        "app.utils.utils_s3download",
-        side_effect=["file_from_s3_1", "file_from_s3_2"],
-    )
-
     # TODO: use real template email file objects when endpoints PR gets merged
     mocker.patch(
         "app.notifications.process_notifications.dao_get_template_email_file_by_id",
@@ -119,6 +114,11 @@ def test_add_email_file_links_to_personalisation(notify_api, mocker, sample_serv
             mocker.Mock(filename="invitation.pdf", validate_users_email=True, retention_period=26),
             mocker.Mock(filename="form.pdf", validate_users_email=True, retention_period=26),
         ],
+    )
+
+    mocker.patch(
+        "app.utils.utils_s3download",
+        side_effect=["file_from_s3_1", "file_from_s3_2"],
     )
 
     mock_upload = mocker.patch(
@@ -152,6 +152,35 @@ def test_add_email_file_links_to_personalisation(notify_api, mocker, sample_serv
             filename="form.pdf",
         ),
     ]
+
+
+def test_add_email_file_links_to_personalisation_template_email_file_not_found(notify_api, mocker, sample_service):
+    content = """
+    Dear ((name)),
+
+    Here is your invitation:
+    ((file::invitation.pdf::36fb0730-6259-4da1-8a80-c8de22ad4246))
+
+    And here is the form to bring to the appointment:
+    ((file::form.pdf::429c0b16-704e-41cb-8181-6448567f7042))
+    """
+    template_id = create_template(sample_service, content=content, template_type=EMAIL_TYPE).id
+    template = SerialisedTemplate.from_id_and_service_id(template_id=template_id, service_id=sample_service.id)
+
+    # TODO: use real template email file objects when endpoints PR gets merged
+    mocker.patch(
+        "app.notifications.process_notifications.dao_get_template_email_file_by_id",
+        side_effect=[None, None],
+    )
+
+    mock_upload = mocker.patch("app.notifications.process_notifications.document_download_client.upload_document")
+
+    with pytest.raises(BadRequestError) as e:
+        add_email_file_links_to_personalisation(template, {"name": "Anne"}, recipient="anne@example.com")
+
+    assert e.value.status_code == 400
+    assert e.value.message == "template_email_file_id 36fb0730-6259-4da1-8a80-c8de22ad4246 does not exist in database."
+    mock_upload.assert_not_called()
 
 
 @freeze_time("2016-01-01 11:09:00.061258")
