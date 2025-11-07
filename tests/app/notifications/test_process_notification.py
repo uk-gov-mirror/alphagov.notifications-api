@@ -52,6 +52,53 @@ def test_create_content_for_notification_with_placeholders_passes(
     assert "Bobby" in str(content)
 
 
+def test_create_content_for_notification_with_email_file_placeholder_passes(sample_service, mocker):
+    content = """
+    Dear ((name)),
+
+    Here is your invitation:
+    ((file::invitation.pdf::36fb0730-6259-4da1-8a80-c8de22ad4246))
+
+    And here is the form to bring to the appointment:
+    ((file::form.pdf::429c0b16-704e-41cb-8181-6448567f7042))
+    """
+    template_id = create_template(sample_service, content=content, template_type=EMAIL_TYPE).id
+    template = SerialisedTemplate.from_id_and_service_id(template_id=template_id, service_id=sample_service.id)
+
+    # TODO: use real template email file objects when endpoints PR gets merged
+    mocker.patch(
+        "app.notifications.process_notifications.dao_get_template_email_file_by_id",
+        side_effect=[
+            mocker.Mock(
+                filename="invitation.pdf",
+                validate_users_email=True,
+                retention_period=26,
+            ),
+            mocker.Mock(filename="form.pdf", validate_users_email=True, retention_period=26),
+        ],
+    )
+
+    mocker.patch(
+        "app.utils.utils_s3download",
+        side_effect=["file_from_s3_1", "file_from_s3_2"],
+    )
+
+    mocker.patch(
+        "app.notifications.process_notifications.document_download_client.upload_document",
+        side_effect=["documents.gov.uk/link1", "documents.gov.uk/link2"],
+    )
+
+    content = create_content_for_notification(
+        template=template,
+        personalisation={"name": "Bobby"},
+        recipient="amanda@example.com",
+    )
+    assert content.content == template.content
+    assert "Bobby" in str(content)
+    assert "documents.gov.uk/link1" in str(content)
+    assert "documents.gov.uk/link2" in str(content)
+
+
 def test_create_content_for_notification_fails_with_missing_personalisation(
     sample_template_with_placeholders,
 ):
@@ -123,15 +170,15 @@ def test_add_email_file_links_to_personalisation(notify_api, mocker, sample_serv
 
     mock_upload = mocker.patch(
         "app.notifications.process_notifications.document_download_client.upload_document",
-        side_effect=["link1.gov.uk", "link2.gov.uk"],
+        side_effect=["documents.gov.uk/link1", "documents.gov.uk/link2"],
     )
 
     personalisation = add_email_file_links_to_personalisation(template, {"name": "Anne"}, recipient="anne@example.com")
 
     assert personalisation == {
         "name": "Anne",
-        "file::invitation.pdf::36fb0730-6259-4da1-8a80-c8de22ad4246": "link1.gov.uk",
-        "file::form.pdf::429c0b16-704e-41cb-8181-6448567f7042": "link2.gov.uk",
+        "file::invitation.pdf::36fb0730-6259-4da1-8a80-c8de22ad4246": "documents.gov.uk/link1",
+        "file::form.pdf::429c0b16-704e-41cb-8181-6448567f7042": "documents.gov.uk/link2",
     }
 
     assert mock_upload.mock_calls == [
