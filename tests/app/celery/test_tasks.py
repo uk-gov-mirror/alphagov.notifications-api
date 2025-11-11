@@ -1504,45 +1504,21 @@ def test_should_use_email_template_and_persist_without_personalisation(sample_em
     )
 
 
-def test_send_email_with_template_email_files(sample_service, mocker, mock_celery_task):
-    content = """
-    Dear ((name)),
-
-    Here is your invitation:
-    ((file::invitation.pdf::36fb0730-6259-4da1-8a80-c8de22ad4246))
-
-    And here is the form to bring to the appointment:
-    ((file::form.pdf::429c0b16-704e-41cb-8181-6448567f7042))
-    """
-    template = create_template(sample_service, content=content, template_type=EMAIL_TYPE)
+def test_send_email_with_template_email_files(
+    sample_service,
+    sample_email_template_with_email_file_placeholders,
+    mocker,
+    mock_celery_task,
+    mock_utils_s3_download,
+    mock_document_download_client_upload,
+    mock_get_template_email_files,
+):
+    template = sample_email_template_with_email_file_placeholders
 
     notification = _notification_json(template, "anne@example.com", personalisation={"name": "Anne"})
     notification_id = uuid.uuid4()
 
     mock_celery_task(provider_tasks.deliver_email)
-
-    # TODO: use real template email file objects when endpoints PR gets merged
-    mocker.patch(
-        "app.notifications.process_notifications.dao_get_template_email_file_by_id",
-        side_effect=[
-            mocker.Mock(
-                filename="invitation.pdf",
-                validate_users_email=True,
-                retention_period=26,
-            ),
-            mocker.Mock(filename="form.pdf", validate_users_email=True, retention_period=26),
-        ],
-    )
-
-    mocker.patch(
-        "app.utils.utils_s3download",
-        side_effect=["file_from_s3_1", "file_from_s3_2"],
-    )
-
-    mocker.patch(
-        "app.document_download_client.upload_document",
-        side_effect=["documents.gov.uk/link1", "documents.gov.uk/link2"],
-    )
 
     save_email(
         sample_service.id,
