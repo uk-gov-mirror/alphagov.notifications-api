@@ -1504,6 +1504,75 @@ def test_should_use_email_template_and_persist_without_personalisation(sample_em
     )
 
 
+def test_send_email_with_template_email_files(sample_service, mocker, mock_celery_task):
+    content = """
+    Dear ((name)),
+
+    Here is your invitation:
+    ((file::invitation.pdf::36fb0730-6259-4da1-8a80-c8de22ad4246))
+
+    And here is the form to bring to the appointment:
+    ((file::form.pdf::429c0b16-704e-41cb-8181-6448567f7042))
+    """
+    template = create_template(sample_service, content=content, template_type=EMAIL_TYPE)
+
+    notification = _notification_json(template, "anne@example.com", personalisation={"name": "Anne"})
+    notification_id = uuid.uuid4()
+
+    mock_celery_task(provider_tasks.deliver_email)
+
+    # TODO: use real template email file objects when endpoints PR gets merged
+    mocker.patch(
+        "app.notifications.process_notifications.dao_get_template_email_file_by_id",
+        side_effect=[
+            mocker.Mock(
+                filename="invitation.pdf",
+                validate_users_email=True,
+                retention_period=26,
+            ),
+            mocker.Mock(filename="form.pdf", validate_users_email=True, retention_period=26),
+        ],
+    )
+
+    mocker.patch(
+        "app.utils.utils_s3download",
+        side_effect=["file_from_s3_1", "file_from_s3_2"],
+    )
+
+    mocker.patch(
+        "app.document_download_client.upload_document",
+        side_effect=["documents.gov.uk/link1", "documents.gov.uk/link2"],
+    )
+
+    save_email(
+        sample_service.id,
+        notification_id,
+        signing.encode(notification),
+        sender_id=None,
+    )
+    persisted_notification = Notification.query.one()
+
+    assert persisted_notification.template_id == template.id
+    assert persisted_notification.status == "created"
+
+    assert persisted_notification.personalisation == {
+        "name": "Anne",
+        "file::invitation.pdf::36fb0730-6259-4da1-8a80-c8de22ad4246": "documents.gov.uk/link1",
+        "file::form.pdf::429c0b16-704e-41cb-8181-6448567f7042": "documents.gov.uk/link2",
+    }
+    assert persisted_notification._personalisation == signing.encode(
+        {
+            "name": "Anne",
+            "file::invitation.pdf::36fb0730-6259-4da1-8a80-c8de22ad4246": "documents.gov.uk/link1",
+            "file::form.pdf::429c0b16-704e-41cb-8181-6448567f7042": "documents.gov.uk/link2",
+        }
+    )
+
+
+def test_send_email_with_template_email_files_from_old_template_version():
+    pass
+
+
 def test_save_sms_should_go_to_retry_queue_if_database_errors(sample_template, mocker, mock_celery_task):
     notification = _notification_json(sample_template, "+447234123123")
 
@@ -1557,21 +1626,21 @@ def test_save_email_should_go_to_retry_queue_if_database_errors(sample_email_tem
 
 
 def test_save_email_does_not_send_duplicate_and_does_not_put_in_retry_queue(
-    sample_notification, mocker, mock_celery_task
+    sample_email_notification, mocker, mock_celery_task
 ):
     json = _notification_json(
-        sample_notification.template,
-        sample_notification.to,
+        sample_email_notification.template,
+        sample_email_notification.to,
         job_id=uuid.uuid4(),
         row_number=1,
     )
     mock_task = mock_celery_task(provider_tasks.deliver_email)
     retry = mocker.patch("app.celery.tasks.save_email.retry", side_effect=Exception())
 
-    notification_id = sample_notification.id
+    notification_id = sample_email_notification.id
 
     save_email(
-        sample_notification.service_id,
+        sample_email_notification.service_id,
         notification_id,
         signing.encode(json),
     )
