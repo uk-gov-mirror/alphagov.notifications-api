@@ -52,41 +52,16 @@ def test_create_content_for_notification_with_placeholders_passes(
     assert "Bobby" in str(content)
 
 
-def test_create_content_for_notification_with_email_file_placeholder_passes(sample_service, mocker):
-    content = """
-    Dear ((name)),
-
-    Here is your invitation:
-    ((file::invitation.pdf::36fb0730-6259-4da1-8a80-c8de22ad4246))
-
-    And here is the form to bring to the appointment:
-    ((file::form.pdf::429c0b16-704e-41cb-8181-6448567f7042))
-    """
-    template_id = create_template(sample_service, content=content, template_type=EMAIL_TYPE).id
+def test_create_content_for_notification_with_email_file_placeholder_passes(
+    sample_service,
+    sample_email_template_with_email_file_placeholders,
+    mocker,
+    mock_utils_s3_download,
+    mock_document_download_client_upload,
+    mock_get_template_email_files,
+):
+    template_id = sample_email_template_with_email_file_placeholders.id
     template = SerialisedTemplate.from_id_and_service_id(template_id=template_id, service_id=sample_service.id)
-
-    # TODO: use real template email file objects when endpoints PR gets merged
-    mocker.patch(
-        "app.notifications.process_notifications.dao_get_template_email_file_by_id",
-        side_effect=[
-            mocker.Mock(
-                filename="invitation.pdf",
-                validate_users_email=True,
-                retention_period=26,
-            ),
-            mocker.Mock(filename="form.pdf", validate_users_email=True, retention_period=26),
-        ],
-    )
-
-    mocker.patch(
-        "app.utils.utils_s3download",
-        side_effect=["file_from_s3_1", "file_from_s3_2"],
-    )
-
-    mocker.patch(
-        "app.notifications.process_notifications.document_download_client.upload_document",
-        side_effect=["documents.gov.uk/link1", "documents.gov.uk/link2"],
-    )
 
     content = create_content_for_notification(
         template=template,
@@ -95,6 +70,7 @@ def test_create_content_for_notification_with_email_file_placeholder_passes(samp
     )
     assert content.content == template.content
     assert "Bobby" in str(content)
+    # assert secure links to files made it to notification content:
     assert "documents.gov.uk/link1" in str(content)
     assert "documents.gov.uk/link2" in str(content)
 
@@ -141,7 +117,7 @@ def test_create_content_for_notification_raises_error_on_qr_code_too_long(
     assert e.value.data == "too much data " * 50
 
 
-def test_add_email_file_links_to_personalisation(notify_api, mocker, sample_service):
+def test_add_email_file_links_to_personalisation(notify_api, mocker, sample_service, mock_get_template_email_files):
     content = """
     Dear ((name)),
 
@@ -153,15 +129,6 @@ def test_add_email_file_links_to_personalisation(notify_api, mocker, sample_serv
     """
     template_id = create_template(sample_service, content=content, template_type=EMAIL_TYPE).id
     template = SerialisedTemplate.from_id_and_service_id(template_id=template_id, service_id=sample_service.id)
-
-    # TODO: use real template email file objects when endpoints PR gets merged
-    mocker.patch(
-        "app.notifications.process_notifications.dao_get_template_email_file_by_id",
-        side_effect=[
-            mocker.Mock(filename="invitation.pdf", validate_users_email=True, retention_period=26),
-            mocker.Mock(filename="form.pdf", validate_users_email=True, retention_period=26),
-        ],
-    )
 
     mocker.patch(
         "app.utils.utils_s3download",
@@ -201,17 +168,10 @@ def test_add_email_file_links_to_personalisation(notify_api, mocker, sample_serv
     ]
 
 
-def test_add_email_file_links_to_personalisation_template_email_file_not_found(notify_api, mocker, sample_service):
-    content = """
-    Dear ((name)),
-
-    Here is your invitation:
-    ((file::invitation.pdf::36fb0730-6259-4da1-8a80-c8de22ad4246))
-
-    And here is the form to bring to the appointment:
-    ((file::form.pdf::429c0b16-704e-41cb-8181-6448567f7042))
-    """
-    template_id = create_template(sample_service, content=content, template_type=EMAIL_TYPE).id
+def test_add_email_file_links_to_personalisation_template_email_file_not_found(
+    notify_api, mocker, sample_service, sample_email_template_with_email_file_placeholders
+):
+    template_id = sample_email_template_with_email_file_placeholders.id
     template = SerialisedTemplate.from_id_and_service_id(template_id=template_id, service_id=sample_service.id)
 
     # TODO: use real template email file objects when endpoints PR gets merged
