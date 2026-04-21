@@ -8,7 +8,12 @@ from sqlalchemy.orm import joinedload
 from sqlalchemy.orm.exc import NoResultFound
 
 from app import db, redis_store
-from app.constants import EMAIL_AUTH_TYPE, NOTIFY_FEATURES_AND_IMPROVEMENTS_SERVICE_ID, NOTIFY_RESEARCH_SERVICE_ID
+from app.constants import (
+    EMAIL_AUTH_TYPE,
+    MANAGE_SETTINGS,
+    NOTIFY_FEATURES_AND_IMPROVEMENTS_SERVICE_ID,
+    NOTIFY_RESEARCH_SERVICE_ID,
+)
 from app.dao.dao_utils import autocommit
 from app.dao.organisation_dao import dao_remove_user_from_organisation
 from app.dao.organisation_user_permissions_dao import organisation_user_permissions_dao
@@ -190,6 +195,34 @@ def dao_archive_user(user):
     user.state = "inactive"
 
     db.session.add(user)
+
+
+def user_can_be_removed_from_service(user, service):
+    """
+    We only remove a user if it won't result in the service having too few active users with the
+    'manage_settings' permission:
+
+    - Services must have at least 1 team member
+    - Users without the 'manage_settings' permission can always be removed since removing them won't affect the number
+      of users with 'manage_settings'
+    - Live services / trial services with a go-live request need 2 users with 'manage_settings'
+    - Trial mode services without a go-live request need 1 uswer with 'manage_settings'
+    """
+    active_users = [user for user in service.users if user.state == "active"]
+
+    if len(active_users) == 1:
+        return False
+
+    if MANAGE_SETTINGS not in user.get_permissions(service_id=service.id):
+        return True
+
+    num_users_with_manage_settings = sum(
+        [MANAGE_SETTINGS in user.get_permissions(service_id=service.id) for user in active_users]
+    )
+
+    min_admin_users = 1 if service.restricted and not service.has_active_go_live_request else 2
+
+    return num_users_with_manage_settings - 1 >= min_admin_users
 
 
 def user_can_be_archived(user):
