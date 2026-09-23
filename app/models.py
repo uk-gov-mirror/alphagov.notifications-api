@@ -163,8 +163,8 @@ class User(db.Model):
     # either email auth or a mobile number must be provided
     __table_args__ = (CheckConstraint("auth_type in ('email_auth', 'webauthn_auth') or mobile_number is not null"),)
 
-    services: Mapped[list["Service"]] = relationship(secondary="user_to_service", backref="users")
-    organisations: Mapped[list["Organisation"]] = relationship(secondary="user_to_organisation", backref="users")
+    services: Mapped[list["Service"]] = relationship(secondary="user_to_service", back_populates="users")
+    organisations: Mapped[list["Organisation"]] = relationship(secondary="user_to_organisation", back_populates="users")
 
     @property
     def password(self):
@@ -305,6 +305,10 @@ class EmailBranding(db.Model):
 
     active = db.Column(db.Boolean, nullable=False, default=True)
 
+    organisations: Mapped[list["Organisation"]] = relationship(
+        secondary="email_branding_to_organisation", back_populates="email_branding_pool"
+    )
+
     CONSTRAINT_UNIQUE_NAME = "uq_email_branding_name"
     CONSTRAINT_CHECK_ONE_OF_ALT_TEXT_TEXT_NULL = "ck_email_branding_one_of_alt_text_or_text_is_null"
     # one of alt_text or text MUST be supplied
@@ -348,6 +352,10 @@ class LetterBranding(db.Model):
     created_by_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=True)
     updated_at = db.Column(db.DateTime, nullable=True, onupdate=datetime.datetime.utcnow)
     updated_by_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=True)
+
+    organisations: Mapped[list["Organisation"]] = relationship(
+        secondary="letter_branding_to_organisation", back_populates="letter_branding_pool"
+    )
 
     def serialize(self) -> SerializedLetterBranding:
         return SerializedLetterBranding(
@@ -393,7 +401,7 @@ class OrganisationPermission(db.Model):
     id = db.Column(UUID(as_uuid=True), primary_key=True, nullable=False, default=uuid.uuid4)
 
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.datetime.utcnow)
-    organisation: Mapped["Organisation"] = relationship(backref="permissions")
+    organisation: Mapped["Organisation"] = relationship(back_populates="permissions")
     organisation_id = db.Column(UUID(as_uuid=True), db.ForeignKey("organisation.id"), nullable=False)
     permission = db.Column(
         db.Enum(*ORGANISATION_PERMISSION_TYPES, name="organisation_permission_types"),
@@ -463,7 +471,7 @@ class Organisation(db.Model):
     )
 
     email_branding_pool: Mapped[list["EmailBranding"]] = relationship(
-        secondary="email_branding_to_organisation", backref="organisations"
+        secondary="email_branding_to_organisation", back_populates="organisations"
     )
 
     # this is default letter branding for organisation
@@ -476,7 +484,7 @@ class Organisation(db.Model):
 
     letter_branding_pool: Mapped[list["LetterBranding"]] = relationship(
         secondary="letter_branding_to_organisation",
-        backref="organisations",
+        back_populates="organisations",
     )
 
     notes = db.Column(db.Text, nullable=True)
@@ -484,6 +492,10 @@ class Organisation(db.Model):
     billing_contact_names = db.Column(db.Text, nullable=True)
     billing_contact_email_addresses = db.Column(db.Text, nullable=True)
     billing_reference = db.Column(db.String(255), nullable=True)
+
+    users: Mapped[list["User"]] = relationship(secondary="user_to_organisation", back_populates="organisations")
+    permissions: Mapped[list["OrganisationPermission"]] = relationship(back_populates="organisation")
+    services: Mapped[list["Service"]] = relationship(back_populates="organisation")
 
     @property
     def live_services(self):
@@ -609,7 +621,7 @@ class Service(db.Model, Versioned):
     confirmed_unique = db.Column(db.Boolean, default=False, nullable=False)
 
     organisation_id = db.Column(UUID(as_uuid=True), db.ForeignKey("organisation.id"), index=True, nullable=True)
-    organisation: Mapped["Organisation"] = relationship(backref="services")
+    organisation: Mapped["Organisation"] = relationship()
 
     notes = db.Column(db.Text, nullable=True)
     purchase_order_number = db.Column(db.String(255), nullable=True)
@@ -625,6 +637,8 @@ class Service(db.Model, Versioned):
         secondary=service_letter_branding,
         backref=db.backref("services", lazy="dynamic"),
     )
+
+    users: Mapped[list["User"]] = relationship(secondary="user_to_service", back_populates="services")
 
     @hybrid_property  # a hybrid_property enables us to still use it in queries
     def name(self):
